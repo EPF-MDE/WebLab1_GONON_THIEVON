@@ -9,8 +9,16 @@ class Book(BaseModel):
     category: Optional[str] = None
     publication_year: Optional[int] = None
 
+class User:
+    id: int
+    name: str
+    username: str
+    password: str
+    gender: str
+
 app = FastAPI()
 books_db: List[Book] = []
+users_db: List[User] = []
 
 @app.get("/")
 def read_root():
@@ -54,8 +62,6 @@ async def delete_book(book_id: int):
 @app.patch("/books/update_book/{book_id}")
 async def patch_book(book_id: int, patch_data: Book):
     stored_book_data = None
-
-
     for book in books_db:
         if book.id == book_id:
             stored_book_data = book
@@ -66,4 +72,22 @@ async def patch_book(book_id: int, patch_data: Book):
     if stored_book_data is None:
         raise HTTPException(status_code=404, detail="Book with id {book_id} not found")
 
+@app.post("/users/create_user")
+async def create_user(new_user: User):
+    new_user.id = len(users_db) + 1
+    users_db.append(new_user)
+    return {"message": "User created successfully", "user": new_user}
 
+
+@app.post("/users/login")
+async def login_user(credentials: username):
+    # Recherche de l'utilisateur par username
+    user = next((user for user in users_db if user.username == credentials.username), None)
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    # Vérification du mot de passe
+    if user.password != credentials.password:
+        raise HTTPException(status_code=401, detail="Mot de passe incorrect")
+    
+    return {"message": "Connexion réussie", "user": user}
