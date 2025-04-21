@@ -1,6 +1,16 @@
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from passlib.context import CryptContext
+
+# --- Configuration du hash des mots de passe ---
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 class Book(BaseModel):
     id: Optional[int] = None
@@ -9,7 +19,7 @@ class Book(BaseModel):
     category: Optional[str] = None
     publication_year: Optional[int] = None
 
-class User:
+class User(BaseModel):
     id: int
     name: str
     username: str
@@ -19,6 +29,8 @@ class User:
 app = FastAPI()
 users_db: List[User] = []
 books_db: List[Book] = []
+
+
 
 ### BOOKS
 
@@ -79,21 +91,27 @@ async def patch_book(book_id: int, patch_data: Book):
             return {'message': f'Book with ID {book_id} has been patched', 'book': updated_book}
     if (stored_book_data is None):
         raise HTTPException(status_code=404, detail = f'Book with ID {book_id} not found')
-    
+
+
+
 ### USERS
 
 @app.post("/users/create_user")
 async def create_user(new_user: User):
-    new_user.id = len(users_db) + 1 #Simple way to generate an ID
-    users_db.append(new_user)
-    return {'message': 'User created succesfully', 'user': new_user}
+    if any(user.username == new_user.username for user in users_db):
+        raise HTTPException(status_code=404, detail="Username already exists")
+    else:
+        new_user.id = len(users_db) + 1 # Simple way to generate an ID
+        new_user.password = get_password_hash(new_user.password)
+        users_db.append(new_user)
+        return {'message': 'User created succesfully', 'user': new_user}
 
 @app.put("/users/update_users/{user_id}")
 async def update_user(user_id: int, updated_user: User):
     for i, user in enumerate(users_db):
         if (user.id == user_id):
             updated_user.id = user_id
-            users_db[i] = update_user
+            users_db[i] = updated_user
             return {'message': f'User with ID {user_id} has been updated', 'user': updated_user}
     raise HTTPException(status_code=404, detail = f'User with ID {user_id} not found')
 
@@ -121,6 +139,6 @@ async def patch_user(user_id: int, patch_data: User):
 @app.post("/users/connect/")
 async def connect_user(user_name: str, user_password: str):
     for user in users_db:
-        if (user.name == user_name and user.password == user_password):
+        if (user.username == user_name and verify_password(user_password, user.password) == True):
             return {'message': 'User is connected', 'user': update_user}
     return {'message': 'Wrong username or password'}
